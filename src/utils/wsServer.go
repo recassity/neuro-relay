@@ -1,14 +1,12 @@
 package utilities
 
-package main
-
 import (
-    "log"
-    "net/http"
-    "sync"
-	  "time"
-  
-    "github.com/gorilla/websocket"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // MessageHandler is called when a message arrives from a client.
