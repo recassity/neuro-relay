@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/recassity/neuro-relay/src/utils"
+	"github.com/recassity/src/utils"
 )
 
 /* =========================
