@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cassitly/neuro-integration-sdk"
-	"github.com/recassity/neuro-relay/src/nbackend"
+	"github.com/recassity/src/nbackend"
 )
 
 /* =========================
