@@ -1,48 +1,7 @@
-intermediary:
-  # Intermediary is the middleman between the Nakurity Backend and the Nakurity Client
-  host: "127.0.0.1"
-  port: 8765
-
-  # Authentication for the entire relay integration
-  auth_token: "super-secret-token"
-
-  # The queue for the neuro integration messages to be relayed back and forth
-  # (from the neuro backend to the neuro integration via the nakurity backend)
-  relay_queue: "relay_message_queue.pkl"
-
-nakurity-backend:
-  # The Nakurity Backend acts as an Neuro Backend Server, that relays information
-  #   to the real neuro backend via the intermediary server.
-
-  # This is done to help neuro manage multiple integrations connected to her at once.
-
-  # Neuro OS is meant to use Neuro Relay to help manage multiple neuro integrations being
-  #   to the neuro backend
+nakurity-backend: # the emulated version of the twin's backend, with multiplexing capabilities.
   host: "127.0.0.1"
   port: 8001
 
-nakurity-client:
-  # The Nakurity Client is the single integration that should be connected to neuro at a time
-  # To allow relay messages back and forth
+nakurity-client: # the client that forwards information to neuro's/evil's backend
   host: "127.0.0.1"
   port: 8000
-
-dependency-authentication:
-  neuro-os:
-    auth_token: "super-secret-token"
-
-# Optional transparent proxy that intercepts direct Neuro integration -> backend connections
-# and announces them to Neuro-OS via the Intermediary.
-intercept-proxy:
-  enabled: false
-  host: "127.0.0.1"
-  port: 8767
-  # Where to forward intercepted traffic (the real Neuro backend)
-  upstream_url: "ws://127.0.0.1:8000"
-  # Which commands indicate a successful connection/handshake to announce
-  match_commands:
-    - "startup"
-    - "actions/register"
-    - "context"
-  # Name this proxy uses when registering to the Intermediary
-  integration_name: "intercept-proxy"
