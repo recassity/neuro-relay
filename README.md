@@ -177,7 +177,8 @@ nakurity-client:
 ```
 src/
 ├── entrypoint.go              # Main entry point
-├── nIntegrationClient.go      # Integration client (relay to Neuro)
+├── nintegration
+|   └── Client.go      # Integration client (relay to Neuro)
 ├── nbackend/
 │   └── Emulation.go          # Emulated backend for games
 ├── utils/
