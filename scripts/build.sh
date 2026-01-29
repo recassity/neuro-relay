@@ -30,7 +30,7 @@ echo ""
 
 # Build NeuroRelay
 echo "Building NeuroRelay..."
-cd src
+cd ../src
 go build -o ../neurorelay -ldflags="-s -w" entrypoint.go
 cd ..
 echo "✅ NeuroRelay built successfully"
@@ -38,7 +38,7 @@ echo ""
 
 # Build example game
 echo "Building example game..."
-cd examples
+cd ../examples
 go build -o ../example_game -ldflags="-s -w" example_game.go
 cd ..
 echo "✅ Example game built successfully"
