@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/recassity/src/nintegration"
+	"github.com/recassity/neuro-relay/src/nintegration"
 )
 
 func main() {
