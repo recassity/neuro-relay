@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/recassity/src/utils"
+	"github.com/recassity/neuro-relay/src/utils"
 )
 
 /* =========================
@@ -104,8 +104,8 @@ func (eb *EmulationBackend) Attach(mux *http.ServeMux, path string) {
 
 func (eb *EmulationBackend) Start(addr string) error {
 	mux := http.NewServeMux()
-	eb.Attach(mux, "/ws")
-	log.Printf("Neuro backend emulation listening on ws://%s/ws\n", addr)
+	eb.Attach(mux, "/")
+	log.Printf("Neuro backend emulation listening on ws://%s/\n", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
@@ -377,12 +377,10 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	// Find the client for this game
 	eb.sessionsMu.RLock()
 	var targetClient *utilities.Client
-	var targetSession *GameSession
 
 	for client, session := range eb.sessions {
 		if session.GameID == gameID {
 			targetClient = client
-			targetSession = session
 			break
 		}
 	}
