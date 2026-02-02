@@ -67,7 +67,7 @@ NeuroRelay transforms it to:
 
 ## Compatibility System
 
-### NeuroRelay-Compatible Integrations
+### NeuroRelay-Compatible Integrations (Deprecated)
 Integrations can declare compatibility by including `nrelay-compatible` in their startup message:
 
 ```json
