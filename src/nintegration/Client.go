@@ -54,11 +54,6 @@ func NewIntegrationClient(config IntegrationClientConfig) (*IntegrationClient, e
 		return nil, err
 	}
 
-	if err := neuroClient.Connect(); err != nil {
-		log.Fatalf("Failed to connect to an neuro backend, err: %v", err)
-	}
-	defer neuroClient.Close()
-
 	ic := &IntegrationClient{
 		neuroClient:    neuroClient,
 		backend:        backend,
