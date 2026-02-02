@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/recassity/neuro-relay/src/utils"
+	"github.com/recassity/src/utils"
 )
 
 /* =========================
@@ -19,6 +19,22 @@ import (
 const (
 	CurrentNRelayVersion = "1.0.0"
 )
+
+// VersionFeatures defines which features are available in each NR version
+type VersionFeatures struct {
+	SupportsHealthEndpoint bool
+	SupportsMultiplexing   bool
+	SupportsCustomRouting  bool
+}
+
+var versionCompatibility = map[string]VersionFeatures{
+	"1.0.0": {
+		SupportsHealthEndpoint: true,
+		SupportsMultiplexing:   true,
+		SupportsCustomRouting:  true,
+	},
+	// Future versions can be added here
+}
 
 /* =========================
    Neuro protocol structures
@@ -52,6 +68,7 @@ type GameSession struct {
 	Actions          map[string]ActionDefinition // Key: original action name
 	NRelayCompatible bool
 	NRelayVersion    string
+	VersionFeatures  VersionFeatures // Features available for this version
 	Client           *utilities.Client
 }
 
@@ -104,8 +121,8 @@ func (eb *EmulationBackend) Attach(mux *http.ServeMux, path string) {
 
 func (eb *EmulationBackend) Start(addr string) error {
 	mux := http.NewServeMux()
-	eb.Attach(mux, "/")
-	log.Printf("Neuro backend emulation listening on ws://%s/\n", addr)
+	eb.Attach(mux, "/ws")
+	log.Printf("Neuro backend emulation listening on ws://%s/ws\n", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
@@ -117,6 +134,12 @@ func (eb *EmulationBackend) messageHandler(c *utilities.Client, _ int, raw []byt
 	var msg ClientMessage
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		log.Println("invalid JSON:", err)
+		return
+	}
+
+	// Handle NeuroRelay Custom (NRC) endpoints
+	if strings.HasPrefix(msg.Command, "nrc-endpoints/") {
+		eb.handleNRCEndpoint(c, msg)
 		return
 	}
 
@@ -145,63 +168,207 @@ func (eb *EmulationBackend) messageHandler(c *utilities.Client, _ int, raw []byt
 }
 
 /* =========================
+   NRC Endpoint Handlers
+   ========================= */
+
+func (eb *EmulationBackend) handleNRCEndpoint(c *utilities.Client, msg ClientMessage) {
+	endpoint := strings.TrimPrefix(msg.Command, "nrc-endpoints/")
+
+	switch endpoint {
+	case "startup":
+		eb.handleNRCStartup(c, msg)
+	case "health":
+		eb.handleNRCHealth(c, msg)
+	default:
+		log.Printf("unknown NRC endpoint: %s", endpoint)
+		eb.sendError(c, "nrc-endpoints/error", "Unknown endpoint: "+endpoint)
+	}
+}
+
+func (eb *EmulationBackend) handleNRCStartup(c *utilities.Client, msg ClientMessage) {
+	eb.sessionsMu.RLock()
+	session := eb.sessions[c]
+	eb.sessionsMu.RUnlock()
+
+	if session == nil {
+		log.Println("NRC startup received from unknown session")
+		eb.sendError(c, "nrc-endpoints/error", "Session not found. Send 'startup' command first.")
+		return
+	}
+
+	// Extract NR version
+	nrVersion, ok := msg.Data["nr-version"].(string)
+	if !ok || nrVersion == "" {
+		log.Printf("NRC startup from %s missing nr-version", session.GameID)
+		eb.sendError(c, "nrc-endpoints/error", "Missing required field: nr-version")
+		return
+	}
+
+	// Get version features
+	features, supported := versionCompatibility[nrVersion]
+	if !supported {
+		log.Printf("Unsupported NR version: %s from %s", nrVersion, session.GameID)
+		// Send available versions
+		availableVersions := make([]string, 0, len(versionCompatibility))
+		for v := range versionCompatibility {
+			availableVersions = append(availableVersions, v)
+		}
+		eb.sendJSON(c, ServerMessage{
+			Command: "nrc-endpoints/version-mismatch",
+			Data: map[string]interface{}{
+				"requested":  nrVersion,
+				"available":  availableVersions,
+				"suggestion": CurrentNRelayVersion,
+			},
+		})
+		return
+	}
+
+	// Update session with NR compatibility
+	session.NRelayCompatible = true
+	session.NRelayVersion = nrVersion
+	session.VersionFeatures = features
+
+	log.Printf("NRC startup: %s is now NR-compatible (version %s)", session.GameID, nrVersion)
+
+	// Send success response with enabled features
+	eb.sendJSON(c, ServerMessage{
+		Command: "nrc-endpoints/startup-ack",
+		Data: map[string]interface{}{
+			"nr-version": CurrentNRelayVersion,
+			"features": map[string]interface{}{
+				"health-endpoint":  features.SupportsHealthEndpoint,
+				"multiplexing":     features.SupportsMultiplexing,
+				"custom-routing":   features.SupportsCustomRouting,
+			},
+		},
+	})
+}
+
+func (eb *EmulationBackend) handleNRCHealth(c *utilities.Client, msg ClientMessage) {
+	eb.sessionsMu.RLock()
+	session := eb.sessions[c]
+	eb.sessionsMu.RUnlock()
+
+	if session == nil {
+		log.Println("NRC health check from unknown session")
+		return
+	}
+
+	if !session.VersionFeatures.SupportsHealthEndpoint {
+		log.Printf("Health endpoint not supported for %s (version %s)", session.GameID, session.NRelayVersion)
+		eb.sendError(c, "nrc-endpoints/error", "Health endpoint not supported in your NR version")
+		return
+	}
+
+	// Parse what info to include
+	includeFields := make(map[string]bool)
+	if msg.Data != nil {
+		if fields, ok := msg.Data["include"].([]interface{}); ok {
+			for _, field := range fields {
+				if fieldName, ok := field.(string); ok {
+					includeFields[fieldName] = true
+				}
+			}
+		} else {
+			// Default: include all
+			includeFields["status"] = true
+			includeFields["version"] = true
+			includeFields["connected-games"] = true
+			includeFields["neuro-backend"] = true
+			includeFields["uptime"] = true
+		}
+	}
+
+	// Build health response
+	healthData := make(map[string]interface{})
+
+	if includeFields["status"] {
+		healthData["status"] = "healthy"
+	}
+
+	if includeFields["version"] {
+		healthData["nr-version"] = CurrentNRelayVersion
+		healthData["game-nr-version"] = session.NRelayVersion
+	}
+
+	if includeFields["connected-games"] {
+		games := eb.GetAllSessions()
+		gameList := make([]map[string]interface{}, 0, len(games))
+		for gameID, gameName := range games {
+			gameList = append(gameList, map[string]interface{}{
+				"id":   gameID,
+				"name": gameName,
+			})
+		}
+		healthData["connected-games"] = gameList
+		healthData["total-games"] = len(games)
+	}
+
+	if includeFields["neuro-backend"] {
+		// This will be filled by integration client if available
+		healthData["neuro-backend-connected"] = true // Placeholder
+	}
+
+	if includeFields["uptime"] {
+		// This would require tracking start time - placeholder for now
+		healthData["uptime-seconds"] = 0
+	}
+
+	if includeFields["features"] {
+		healthData["features"] = map[string]interface{}{
+			"health-endpoint": session.VersionFeatures.SupportsHealthEndpoint,
+			"multiplexing":    session.VersionFeatures.SupportsMultiplexing,
+			"custom-routing":  session.VersionFeatures.SupportsCustomRouting,
+		}
+	}
+
+	if includeFields["lock-status"] {
+		healthData["backend-locked"] = eb.IsLocked()
+	}
+
+	log.Printf("Health check from %s: %v", session.GameID, includeFields)
+
+	// Send health response
+	eb.sendJSON(c, ServerMessage{
+		Command: "nrc-endpoints/health-response",
+		Data:    healthData,
+	})
+}
+
+/* =========================
    Command handlers
    ========================= */
 
 func (eb *EmulationBackend) handleStartup(c *utilities.Client, msg ClientMessage) {
-	// Check for nrelay-compatible field
-	nrelayCompatible := false
-	nrelayVersion := ""
-
-	if msg.Data != nil {
-		if version, ok := msg.Data["nrelay-compatible"].(string); ok {
-			nrelayCompatible = true
-			nrelayVersion = version
-		}
-	}
+	// Standard startup - treat all games as potentially compatible
+	// Actual compatibility is determined via nrc-endpoints/startup
 
 	eb.lockMu.Lock()
 	defer eb.lockMu.Unlock()
 
-	// If backend is locked and this is a new nrelay-compatible integration trying to connect
-	if eb.locked && eb.lockedToClient != c {
-		if nrelayCompatible {
-			// Send nrelay/locked message
-			eb.sendError(c, "nrelay/locked", "A non-NeuroRelay compatible integration is currently connected")
-			log.Printf("Rejected nrelay-compatible integration (backend locked to non-compatible integration)")
-			return
-		}
-		// If it's also non-compatible, reject it too
-		eb.sendError(c, "nrelay/locked", "Another integration is currently connected")
-		log.Printf("Rejected non-compatible integration (backend already locked)")
-		return
-	}
-
-	// If not nrelay-compatible, lock the backend to this client
-	if !nrelayCompatible {
-		eb.locked = true
-		eb.lockedToClient = c
-		log.Printf("Backend locked to non-NeuroRelay compatible integration: %s", msg.Game)
-	} else {
-		log.Printf("NeuroRelay compatible integration connected: %s (version %s)", msg.Game, nrelayVersion)
-	}
-
 	// Generate game ID from game name
 	gameID := eb.normalizeGameName(msg.Game)
 
+	// Create session with default compatibility (no NR features)
 	eb.sessionsMu.Lock()
 	eb.sessions[c] = &GameSession{
 		GameName:         msg.Game,
 		GameID:           gameID,
 		LatestActionNum:  0,
 		Actions:          make(map[string]ActionDefinition),
-		NRelayCompatible: nrelayCompatible,
-		NRelayVersion:    nrelayVersion,
-		Client:           c,
+		NRelayCompatible: false, // Default to non-compatible
+		NRelayVersion:    "",
+		VersionFeatures: VersionFeatures{
+			SupportsHealthEndpoint: false,
+			SupportsMultiplexing:   false,
+			SupportsCustomRouting:  false,
+		},
+		Client: c,
 	}
 	eb.sessionsMu.Unlock()
 
-	log.Printf("Startup from game: %s (ID: %s)", msg.Game, gameID)
+	log.Printf("Startup from game: %s (ID: %s) - awaiting NR compatibility check", msg.Game, gameID)
 
 	// Notify integration client
 	if eb.OnStartup != nil {
@@ -257,17 +424,24 @@ func (eb *EmulationBackend) handleRegisterActions(c *utilities.Client, msg Clien
 		// Store original action
 		session.Actions[action.Name] = action
 
-		// Generate prefixed action name for neuro: gameID/actionName
-		prefixedActionName := session.GameID + "/" + action.Name
+		// Only prefix actions if multiplexing is supported
+		var actionNameToRegister string
+		if session.VersionFeatures.SupportsMultiplexing {
+			// Generate prefixed action name for neuro: gameID/actionName
+			actionNameToRegister = session.GameID + "/" + action.Name
+			log.Printf("Registered action with multiplexing: %s -> %s", action.Name, actionNameToRegister)
+		} else {
+			// No prefixing for non-multiplexing clients
+			actionNameToRegister = action.Name
+			log.Printf("Registered action without multiplexing: %s", action.Name)
+		}
 
-		log.Printf("Registered action: %s -> %s", action.Name, prefixedActionName)
-
-		// Notify integration client with prefixed name
+		// Notify integration client
 		if eb.OnActionRegistered != nil {
-			// Create a copy with the prefixed name for forwarding to Neuro
-			prefixedAction := action
-			prefixedAction.Name = prefixedActionName
-			eb.OnActionRegistered(session.GameID, prefixedActionName, prefixedAction)
+			// Create a copy with the appropriate name for forwarding to Neuro
+			forwardedAction := action
+			forwardedAction.Name = actionNameToRegister
+			eb.OnActionRegistered(session.GameID, actionNameToRegister, forwardedAction)
 		}
 	}
 }
@@ -292,14 +466,19 @@ func (eb *EmulationBackend) handleUnregisterActions(c *utilities.Client, msg Cli
 		if name, ok := n.(string); ok {
 			delete(session.Actions, name)
 
-			// Generate prefixed action name
-			prefixedActionName := session.GameID + "/" + name
-
-			log.Printf("Unregistered action: %s -> %s", name, prefixedActionName)
+			// Generate action name based on multiplexing support
+			var actionNameToUnregister string
+			if session.VersionFeatures.SupportsMultiplexing {
+				actionNameToUnregister = session.GameID + "/" + name
+				log.Printf("Unregistered action with multiplexing: %s -> %s", name, actionNameToUnregister)
+			} else {
+				actionNameToUnregister = name
+				log.Printf("Unregistered action without multiplexing: %s", name)
+			}
 
 			// Notify integration client
 			if eb.OnActionUnregistered != nil {
-				eb.OnActionUnregistered(session.GameID, prefixedActionName)
+				eb.OnActionUnregistered(session.GameID, actionNameToUnregister)
 			}
 		}
 	}
@@ -330,19 +509,23 @@ func (eb *EmulationBackend) handleForceActions(c *utilities.Client, msg ClientMe
 		return
 	}
 
-	// Convert and prefix action names
-	prefixedActionNames := make([]string, 0, len(rawActionNames))
+	// Convert action names, prefix only if multiplexing is supported
+	processedActionNames := make([]string, 0, len(rawActionNames))
 	for _, name := range rawActionNames {
 		if actionName, ok := name.(string); ok {
-			prefixedActionNames = append(prefixedActionNames, session.GameID+"/"+actionName)
+			if session.VersionFeatures.SupportsMultiplexing {
+				processedActionNames = append(processedActionNames, session.GameID+"/"+actionName)
+			} else {
+				processedActionNames = append(processedActionNames, actionName)
+			}
 		}
 	}
 
-	log.Printf("Force actions from %s: %v", session.GameID, prefixedActionNames)
+	log.Printf("Force actions from %s: %v (multiplexing: %v)", session.GameID, processedActionNames, session.VersionFeatures.SupportsMultiplexing)
 
 	// Notify integration client
 	if eb.OnActionForce != nil {
-		eb.OnActionForce(session.GameID, state, query, ephemeralContext, priority, prefixedActionNames)
+		eb.OnActionForce(session.GameID, state, query, ephemeralContext, priority, processedActionNames)
 	}
 }
 
@@ -377,10 +560,12 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	// Find the client for this game
 	eb.sessionsMu.RLock()
 	var targetClient *utilities.Client
+	var targetSession *GameSession
 
 	for client, session := range eb.sessions {
 		if session.GameID == gameID {
 			targetClient = client
+			targetSession = session
 			break
 		}
 	}
@@ -390,9 +575,16 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 		return fmt.Errorf("game session not found: %s", gameID)
 	}
 
-	// Remove the gameID prefix from the action name before sending to the game
-	// "game-a/buy_books" -> "buy_books"
-	originalActionName := strings.TrimPrefix(actionName, gameID+"/")
+	// Remove the gameID prefix only if multiplexing is enabled for this session
+	// Otherwise, send the action name as-is
+	var originalActionName string
+	if targetSession.VersionFeatures.SupportsMultiplexing {
+		// "game-a/buy_books" -> "buy_books"
+		originalActionName = strings.TrimPrefix(actionName, gameID+"/")
+	} else {
+		// Action name is already correct for non-multiplexed games
+		originalActionName = actionName
+	}
 
 	payload := ServerMessage{
 		Command: "action",
