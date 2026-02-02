@@ -1,0 +1,13 @@
+integration:
+  name: "Game Hub"
+  context: "This integration is like a game hub, where it is useless without games connected to it.
+    But very so useful, for you to be able to play multiple games or apps, concurrently, at once."
+
+version:
+  num: 1.0.0
+  features:
+    - "multiplexing"
+    - "nrc-endpoints/health"
+    - "nrc-endpoints/startup"
+    - "nrc-endpoints/version-mismatch"
+    - "nrc-endpoints/error"
