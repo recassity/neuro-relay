@@ -40,8 +40,14 @@ echo ""
 echo "Building example game..."
 cd examples
 go build -o ../example_game -ldflags="-s -w" example_game.go
-cd ..
 echo "✅ Example game built successfully"
+echo ""
+
+# Build NR compatible example
+echo "Building NR-compatible example..."
+go build -o ../nr_example_game -ldflags="-s -w" nr_compatible_game.go
+cd ..
+echo "✅ NR-compatible example built successfully"
 echo ""
 
 echo "======================================"
@@ -49,14 +55,22 @@ echo "  Build Complete!"
 echo "======================================"
 echo ""
 echo "Executables created:"
-echo "  - ./neurorelay       (Main relay server)"
-echo "  - ./example_game     (Example integration)"
+echo "  - ./neurorelay         (Main relay server)"
+echo "  - ./example_game       (Basic example integration)"
+echo "  - ./nr_example_game    (NR-compatible example with health checks)"
 echo ""
 echo "To start NeuroRelay:"
 echo "  ./neurorelay -name \"Game Hub\" -neuro-url \"ws://localhost:8000\" -emulated-addr \"127.0.0.1:8001\""
 echo ""
-echo "To run the example game:"
+echo "To run the basic example:"
 echo "  ./example_game"
 echo ""
-echo "For more information, see README.md and docs/QUICKSTART.md"
+echo "To run the NR-compatible example:"
+echo "  ./nr_example_game"
+echo ""
+echo "For more information, see:"
+echo "  - README.md (Overview)"
+echo "  - QUICKSTART.md (Getting started)"
+echo "  - docs/NRC-Endpoints.md (NRC endpoints documentation)"
+echo "  - docs/Migration-Guide.md (Upgrading guide)"
 echo ""
