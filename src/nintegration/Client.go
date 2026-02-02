@@ -197,7 +197,7 @@ func (ic *IntegrationClient) Start() error {
 	}
 
 	log.Printf("NeuroRelay started:")
-	log.Printf("  - Emulated backend: ws://%s/ws", ic.config.EmulatedAddr)
+	log.Printf("  - Emulated backend: ws://%s/", ic.config.EmulatedAddr)
 	log.Printf("  - Connected to Neuro as: %s", ic.config.RelayName)
 
 	// Handle errors from Neuro client

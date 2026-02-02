@@ -121,7 +121,7 @@ func (eb *EmulationBackend) Attach(mux *http.ServeMux, path string) {
 
 func (eb *EmulationBackend) Start(addr string) error {
 	mux := http.NewServeMux()
-	eb.Attach(mux, "/ws")
+	eb.Attach(mux, "/")
 	log.Printf("Neuro backend emulation listening on ws://%s/ws\n", addr)
 	return http.ListenAndServe(addr, mux)
 }

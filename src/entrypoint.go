@@ -40,7 +40,7 @@ func main() {
 
 	log.Println()
 	log.Println("NeuroRelay is running!")
-	log.Println("- Games can connect to: ws://" + *emulatedAddr + "/ws")
+	log.Println("- Games can connect to: ws://" + *emulatedAddr)
 	log.Println("- Connected to Neuro as: " + *relayName)
 	log.Println()
 	log.Println("Waiting for game integrations to connect...")
