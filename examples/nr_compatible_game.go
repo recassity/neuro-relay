@@ -229,7 +229,8 @@ func (g *NRCompatibleGame) handleAction(msg map[string]interface{}) {
 
 	actionID, _ := data["id"].(string)
 	actionName, _ := data["name"].(string)
-	actionData, _ := data["data"].(string)
+	// This is apparently unused.
+	// actionData, _ := data["data"].(string)
 
 	log.Printf("⚡ Action received: %s (id: %s)", actionName, actionID)
 
@@ -260,7 +261,7 @@ func (g *NRCompatibleGame) handleAction(msg map[string]interface{}) {
 func main() {
 	relayURL := os.Getenv("NEURORELAY_URL")
 	if relayURL == "" {
-		relayURL = "ws://127.0.0.1:8001/ws"
+		relayURL = "ws://127.0.0.1:8001"
 	}
 
 	log.Println("===========================================")
