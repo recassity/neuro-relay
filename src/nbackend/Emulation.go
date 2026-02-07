@@ -572,7 +572,19 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	eb.sessionsMu.RUnlock()
 
 	if targetClient == nil {
-		return fmt.Errorf("game session not found: %s", gameID)
+		err := fmt.Errorf("game session not found: %s (client disconnected)", gameID)
+		log.Printf("ERROR: %v", err)
+		
+		// CRITICAL: Send failure result back to integration client
+		// so Neuro doesn't wait forever for a response
+		if eb.OnActionResult != nil {
+			log.Printf("Notifying Neuro that game '%s' disconnected for action %s", gameID, actionID)
+			// Make the sucess bool true, so Neuro / Evil don't automatically retry
+			// The message will indicate the disconnect
+			eb.OnActionResult(gameID, actionID, true, "Game disconnected unexpectedly")
+		}
+		
+		return err
 	}
 
 	// Remove the gameID prefix only if multiplexing is enabled for this session
@@ -595,7 +607,9 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 		},
 	}
 
-	return eb.sendJSON(targetClient, payload)
+	// CRITICAL FIX: Use safe send that won't panic on closed channel
+	// and notifies Neuro if send fails
+	return eb.sendJSONSafe(targetClient, payload, gameID, actionID)
 }
 
 // GetAllSessions returns information about all connected sessions
@@ -659,6 +673,42 @@ func (eb *EmulationBackend) sendJSON(c *utilities.Client, v interface{}) error {
 	if err != nil {
 		return err
 	}
+	c.Send(b)
+	return nil
+}
+
+// sendJSONSafe sends JSON to a client with graceful handling of closed connections
+// This prevents "send on closed channel" panics and notifies Neuro of disconnections
+func (eb *EmulationBackend) sendJSONSafe(c *utilities.Client, v interface{}, gameID string, actionID string) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	// Use defer/recover to catch panics from sending to closed channel
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("WARNING: Failed to send to %s (client disconnected): %v", gameID, r)
+			
+			// Clean up the session if it still exists
+			eb.sessionsMu.Lock()
+			for client, session := range eb.sessions {
+				if client == c {
+					delete(eb.sessions, client)
+					log.Printf("Cleaned up disconnected session: %s", session.GameID)
+					break
+				}
+			}
+			eb.sessionsMu.Unlock()
+			
+			// CRITICAL: Notify Neuro that the action failed due to disconnect
+			if eb.OnActionResult != nil {
+				log.Printf("Notifying Neuro of disconnect during send for action %s", actionID)
+				eb.OnActionResult(gameID, actionID, false, "Game disconnected during action send")
+			}
+		}
+	}()
+
 	c.Send(b)
 	return nil
 }
