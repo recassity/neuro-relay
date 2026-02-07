@@ -139,7 +139,7 @@ Neuro receives: Action "game-a--buy_book" from "Game Hub"
 #### Action Execution Flow:
 
 ```
-Neuro executes: "game-a/buy_book"
+Neuro executes: "game-a--buy_book"
         ↓
 Integration Client (RelayActionHandler.Execute):
   - Generate unique actionID: "game-a_buy_book_12345"
