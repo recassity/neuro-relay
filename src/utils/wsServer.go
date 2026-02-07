@@ -119,6 +119,17 @@ func (s *Server) run() {
 	}
 }
 
+// Close closes the WebSocket connection from the server side
+func (c *Client) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	
+	// Close the WebSocket connection
+	// This will trigger the readPump to exit, which calls unregister
+	return c.conn.Close()
+}
+
 // Send enqueues a message to be written to this client.
 func (c *Client) Send(message []byte) {
 	// copy to avoid race if caller reuses slice

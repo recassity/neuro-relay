@@ -634,8 +634,9 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	return eb.sendJSONSafe(targetClient, payload, gameID, actionID)
 }
 
-// SendShutdown sends a graceful shutdown command to a specific game
-func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) error {
+// SendShutdown sends a graceful shutdown command to a specific game  
+// Returns the client connection for fallback forceful disconnect if needed
+func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) (*utilities.Client, error) {
 	// Find the client for this game
 	eb.sessionsMu.RLock()
 	var targetClient *utilities.Client
@@ -649,7 +650,7 @@ func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) erro
 	eb.sessionsMu.RUnlock()
 
 	if targetClient == nil {
-		return fmt.Errorf("game session not found: %s", gameID)
+		return nil, fmt.Errorf("game session not found: %s", gameID)
 	}
 
 	log.Printf("Sending shutdown command to %s (wants_shutdown: %v)", gameID, wantsShutdown)
@@ -661,7 +662,21 @@ func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) erro
 		},
 	}
 
-	return eb.sendJSON(targetClient, payload)
+	err := eb.sendJSON(targetClient, payload)
+	return targetClient, err
+}
+
+// ForceDisconnect forcefully closes a game's WebSocket connection
+func (eb *EmulationBackend) ForceDisconnect(client *utilities.Client, gameID string) {
+	log.Printf("⚠️ Forcefully disconnecting game: %s (shutdown timeout - game did not respond to graceful shutdown)", gameID)
+	
+	// The client's Close() method will trigger the websocket close,
+	// which will automatically trigger the unregister mechanism in wsServer.go
+	if err := client.Close(); err != nil {
+		log.Printf("Error closing connection for %s: %v", gameID, err)
+	}
+	
+	log.Printf("✅ Game %s forcefully disconnected via WebSocket close", gameID)
 }
 
 // GetAllSessions returns information about all connected sessions

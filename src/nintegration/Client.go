@@ -10,11 +10,17 @@ import (
 	"github.com/recassity/neuro-relay/src/nbackend"
 	"github.com/gorilla/websocket"
 	"net/url"
-	//"time"
+	"time"
+)
+
+const (
+	// ShutdownGracefulTimeout is how long to wait for a game to respond to shutdown/graceful
+	// before forcefully closing the WebSocket connection
+	ShutdownGracefulTimeout = 5 * time.Second
 )
 
 /* =========================
-   Integration Client - Fixed Version
+   Integration Client
    Handles Neuro connection manually to preserve action IDs
    ========================= */
 
@@ -383,12 +389,29 @@ func (ic *IntegrationClient) handleShutdownGameAction(actionID string, actionDat
 	
 	log.Printf("Requesting graceful shutdown for game: %s", params.GameID)
 	
-	// Send shutdown command to the game
-	if err := ic.backend.SendShutdown(params.GameID, true); err != nil {
-		log.Printf("Failed to send shutdown to game %s: %v", params.GameID, err)
-		ic.sendActionResult(actionID, false, fmt.Sprintf("Failed to shutdown game: %v", err))
-		return
-	}
+	// Send shutdown command to the game and get client reference for fallback
+	client, err := ic.backend.SendShutdown(params.GameID, true)
+	if err != nil {
+ 		log.Printf("Failed to send shutdown to game %s: %v", params.GameID, err)
+ 		ic.sendActionResult(actionID, false, fmt.Sprintf("Failed to shutdown game: %v", err))
+ 		return
+ 	}
+ 	
+	// Start timeout goroutine for fallback forceful disconnect
+	go func() {
+		// Wait for graceful shutdown timeout
+		time.Sleep(ShutdownGracefulTimeout)
+		
+		// Check if game is still connected
+		games := ic.backend.GetAllSessions()
+		if _, stillConnected := games[params.GameID]; stillConnected {
+			log.Printf("⏱️ Game %s did not respond to graceful shutdown within %v, forcing disconnect", 
+				params.GameID, ShutdownGracefulTimeout)
+			ic.backend.ForceDisconnect(client, params.GameID)
+		} else {
+			log.Printf("✅ Game %s shut down gracefully before timeout", params.GameID)
+		}
+	}()
 	
 	ic.sendActionResult(actionID, true, fmt.Sprintf("Shutdown request sent to game %s", params.GameID))
 }
