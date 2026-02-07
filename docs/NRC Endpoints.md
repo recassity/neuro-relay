@@ -166,7 +166,7 @@ type VersionFeatures struct {
 ### For NeuroRelay-Compatible Integrations
 
 ```
-1. Connect to NeuroRelay (ws://127.0.0.1:8001/ws)
+1. Connect to NeuroRelay (ws://127.0.0.1:8001)
    ↓
 2. Send standard startup command
    {"command": "startup", "game": "My Game"}
@@ -232,7 +232,7 @@ import (
 
 func main() {
     // Connect to NeuroRelay
-    conn, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:8001/ws", nil)
+    conn, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:8001", nil)
     if err != nil {
         log.Fatal(err)
     }
