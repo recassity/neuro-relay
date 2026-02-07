@@ -8,23 +8,23 @@ NeuroRelay implements a multiplexing layer between multiple game integrations an
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                         NeuroRelay System                         │
+│                         NeuroRelay System                        │
 ├──────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌─────────────────────┐         ┌──────────────────────────┐   │
-│  │  Emulated Backend   │◄───────►│  Integration Client      │   │
-│  │  (nbackend)         │         │  (nIntegrationClient)    │   │
-│  │                     │         │                          │   │
-│  │ • Message Handler   │         │ • Neuro SDK Client       │   │
-│  │ • Session Manager   │         │ • Action Router          │   │
-│  │ • Lock Manager      │         │ • Callback Handler       │   │
-│  │ • Game ID Generator │         │ • ID Mapper              │   │
-│  └─────────────────────┘         └──────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────┐         ┌──────────────────────────┐    │
+│  │  Emulated Backend   │◄───────►│  Integration Client      │    │
+│  │  (nbackend)         │         │  (nIntegrationClient)    │    │
+│  │                     │         │                          │    │
+│  │ • Message Handler   │         │ • Neuro SDK Client       │    │
+│  │ • Session Manager   │         │ • Action Router          │    │
+│  │ • Lock Manager      │         │ • Callback Handler       │    │
+│  │ • Game ID Generator │         │ • ID Mapper              │    │
+│  └─────────────────────┘         └──────────────────────────┘    │
 │         ▲                                    │                   │
 │         │                                    │                   │
 └─────────┼────────────────────────────────────┼───────────────────┘
           │                                    │
-          │ ws://127.0.0.1:8001/ws            │ ws://localhost:8000
+          │ ws://127.0.0.1:8001/               │ ws://localhost:8000
           │                                    ▼
   ┌───────┴─────────┐                 ┌──────────────┐
   │  Game A         │                 │  Neuro-sama  │
@@ -94,7 +94,7 @@ The integration client connects to the real Neuro backend and manages bidirectio
 
 #### Responsibilities:
 - Connect to Neuro backend as a single unified game
-- Register actions with prefixed names (`game-id/action-name`)
+- Register actions with prefixed names (`game-id--action-name`)
 - Route Neuro's action executions to appropriate games
 - Track action IDs to game mappings
 - Forward context and results between games and Neuro
@@ -144,11 +144,11 @@ Neuro executes: "game-a/buy_book"
 Integration Client (RelayActionHandler.Execute):
   - Generate unique actionID: "game-a_buy_book_12345"
   - Track: actionIDToGame["game-a_buy_book_12345"] = "game-a"
-  - Call backend.SendAction("game-a", actionID, "game-a/buy_book", data)
+  - Call backend.SendAction("game-a", actionID, "game-a--buy_book", data)
         ↓
 Emulated Backend.SendAction:
   - Find session for "game-a"
-  - Strip prefix: "game-a/buy_book" → "buy_book"
+  - Strip prefix: "game-a--buy_book" → "buy_book"
   - Send to game: {"command": "action", "data": {"id": actionID, "name": "buy_book", ...}}
         ↓
 Game A receives: action "buy_book"
@@ -184,7 +184,7 @@ Reusable WebSocket server library with client management.
 server := utilities.New(func(c *Client, msgType int, data []byte) {
     // Handle message from client
 })
-server.Attach(mux, "/ws")
+server.Attach(mux, "/")
 ```
 
 ## Game ID Generation
