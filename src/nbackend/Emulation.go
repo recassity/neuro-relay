@@ -123,7 +123,7 @@ func (eb *EmulationBackend) Attach(mux *http.ServeMux, path string) {
 func (eb *EmulationBackend) Start(addr string) error {
 	mux := http.NewServeMux()
 	eb.Attach(mux, "/")
-	log.Printf("Neuro backend emulation listening on ws://%s/ws\n", addr)
+	log.Printf("Neuro backend emulation listening on ws://%s/\n", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
@@ -473,7 +473,7 @@ func (eb *EmulationBackend) handleUnregisterActions(c *utilities.Client, msg Cli
 			// Generate action name based on multiplexing support
 			var actionNameToUnregister string
 			if session.VersionFeatures.SupportsMultiplexing {
-				actionNameToUnregister = session.GameID + "/" + name
+				actionNameToUnregister = session.GameID + "--" + name
 				log.Printf("Unregistered action with multiplexing: %s -> %s", name, actionNameToUnregister)
 			} else {
 				actionNameToUnregister = name
