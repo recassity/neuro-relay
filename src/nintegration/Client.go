@@ -34,6 +34,9 @@ type IntegrationClient struct {
 	closeChan     chan struct{}
 	registeredActions map[string]nbackend.ActionDefinition
 	actionsMu     sync.RWMutex
+	
+	// Mutex to protect WebSocket writes (gorilla/websocket is not thread-safe)
+	sendMu        sync.Mutex
 }
 
 type IntegrationClientConfig struct {
@@ -274,13 +277,13 @@ func (ic *IntegrationClient) handleActionFromNeuro(msg map[string]interface{}) {
 	log.Printf("Executing relayed action: %s (id: %s, game: %s)", actionName, actionID, gameID)
 
 	// Forward to game with THE SAME action ID
+	// The backend will handle sending the result if the game is disconnected
 	if err := ic.backend.SendAction(gameID, actionID, actionName, actionData); err != nil {
 		log.Printf("Failed to send action to game: %v", err)
-
-		// Scuffed patch for now, to avoid neuro relay sending duplicate action results
-		if err != fmt.Errorf("game session not found: %s (client disconnected)", gameID) {
-			ic.sendActionResult(actionID, true, fmt.Sprintf("Failed to relay: %v", err))
-		}
+		
+		// IMPORTANT: Don't send duplicate results here!
+		// The backend's SendAction already calls OnActionResult callback
+		// if the game is disconnected, so we just need to clean up our tracking
 		
 		ic.actionIDMu.Lock()
 		delete(ic.actionIDToGame, actionID)
@@ -313,6 +316,11 @@ func (ic *IntegrationClient) reregisterAllActions() {
 }
 
 func (ic *IntegrationClient) sendToNeuro(msg map[string]interface{}) error {
+	// CRITICAL FIX: Protect WebSocket writes with mutex
+	// gorilla/websocket is NOT thread-safe for concurrent writes
+	ic.sendMu.Lock()
+	defer ic.sendMu.Unlock()
+	
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
