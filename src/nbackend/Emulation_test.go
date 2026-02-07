@@ -432,7 +432,7 @@ func TestSendActionSafety(t *testing.T) {
 	if !resultCalled {
 		t.Error("Expected OnActionResult to be called on disconnect")
 	}
-	if resultSuccess {
+	if !resultSuccess {
 		t.Error("Expected OnActionResult to report success=true (not to auto-retry)")
 	}
 	if !strings.Contains(resultMessage, "disconnected") && !strings.Contains(resultMessage, "Game disconnected") {
