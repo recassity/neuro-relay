@@ -4,5 +4,7 @@ github.com/cassitly/neuro-integration-sdk v0.0.0-20260202025030-df3f0a3b3483 h1:
 github.com/cassitly/neuro-integration-sdk v0.0.0-20260202025030-df3f0a3b3483/go.mod h1:KzWrYYsirsJQrPLOF/OL7NMY7pfO7uDGJG3o7ItgASI=
 github.com/cassitly/neuro-integration-sdk v0.0.0-20260202031411-bf0afa80433f h1:YG9tv7dFdIQR0o+scSV6OMEc1WApoVkXrZddel59xdM=
 github.com/cassitly/neuro-integration-sdk v0.0.0-20260202031411-bf0afa80433f/go.mod h1:KzWrYYsirsJQrPLOF/OL7NMY7pfO7uDGJG3o7ItgASI=
+github.com/cassitly/neuro-integration-sdk v0.0.0-20260204023844-9bd2e0e6a398 h1:VFCSUuYzFvV53ahRUdcOfX0FpxZjG/cAgLB6OrzkoL4=
+github.com/cassitly/neuro-integration-sdk v0.0.0-20260204023844-9bd2e0e6a398/go.mod h1:KzWrYYsirsJQrPLOF/OL7NMY7pfO7uDGJG3o7ItgASI=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
