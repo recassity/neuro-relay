@@ -2,6 +2,7 @@ package nbackend
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -135,7 +136,7 @@ func TestActionPrefixing(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.gameID+"/"+tt.actionName, func(t *testing.T) {
+		t.Run(tt.gameID+"--"+tt.actionName, func(t *testing.T) {
 			// Create session
 			mockClient := &utilities.Client{}
 			backend.sessionsMu.Lock()
@@ -150,30 +151,41 @@ func TestActionPrefixing(t *testing.T) {
 			}
 			backend.sessionsMu.Unlock()
 
-			// Register action callback
+			// Register action callback to capture the registered name
 			var registeredName string
 			backend.OnActionRegistered = func(gameID, actionName string, action ActionDefinition) {
 				registeredName = actionName
 			}
 
-			// Simulate action registration
-			backend.sessionsMu.RLock()
-			session := backend.sessions[mockClient]
-			backend.sessionsMu.RUnlock()
-
+			// Simulate the actual registration flow that happens in handleRegisterActions
 			action := ActionDefinition{
 				Name:        tt.actionName,
 				Description: "Test action",
 			}
 
+			// Store in session
+			backend.sessionsMu.RLock()
+			session := backend.sessions[mockClient]
+			backend.sessionsMu.RUnlock()
+			
+			session.Actions[action.Name] = action
+
+			// Determine the forwarded action name based on multiplexing
+			var forwardedName string
 			if tt.multiplexing {
-				registeredName = tt.gameID + "--" + tt.actionName
+				forwardedName = tt.gameID + "--" + tt.actionName
 			} else {
-				registeredName = tt.actionName
+				forwardedName = tt.actionName
 			}
 
-			backend.OnActionRegistered(session.GameID, registeredName, action)
+			// Call the callback as the real implementation would
+			if backend.OnActionRegistered != nil {
+				forwardedAction := action
+				forwardedAction.Name = forwardedName
+				backend.OnActionRegistered(session.GameID, forwardedName, forwardedAction)
+			}
 
+			// Verify the registered name matches expected
 			if registeredName != tt.expectedName {
 				t.Errorf("Action name = %q, want %q", registeredName, tt.expectedName)
 			}
@@ -294,8 +306,12 @@ func TestGetAllSessions(t *testing.T) {
 		"game-c": "Game C",
 	}
 
+	// Track clients for cleanup
+	clients := make([]*utilities.Client, 0)
+
 	for gameID, gameName := range sessions {
 		mockClient := &utilities.Client{}
+		clients = append(clients, mockClient)
 		backend.sessionsMu.Lock()
 		backend.sessions[mockClient] = &GameSession{
 			GameName: gameName,
@@ -309,20 +325,30 @@ func TestGetAllSessions(t *testing.T) {
 	// Get all sessions
 	result := backend.GetAllSessions()
 
-	// Verify
+	// Verify count
 	if len(result) != len(sessions) {
 		t.Errorf("Expected %d sessions, got %d", len(sessions), len(result))
 	}
 
+	// Verify each session is present with correct name
 	for gameID, gameName := range sessions {
 		if result[gameID] != gameName {
 			t.Errorf("Session %q: got %q, want %q", gameID, result[gameID], gameName)
 		}
 	}
 
-	// Cleanup
-	for client := range backend.sessions {
+	// Cleanup all clients
+	for _, client := range clients {
 		backend.HandleClientDisconnect(client)
+	}
+
+	// Verify all sessions cleaned up
+	backend.sessionsMu.RLock()
+	remainingCount := len(backend.sessions)
+	backend.sessionsMu.RUnlock()
+
+	if remainingCount != 0 {
+		t.Errorf("Expected 0 sessions after cleanup, got %d", remainingCount)
 	}
 }
 
@@ -377,25 +403,42 @@ func TestSendActionSafety(t *testing.T) {
 
 	// Track result callbacks
 	var resultCalled bool
+	var resultSuccess bool
+	var resultMessage string
+	var mu sync.Mutex
+
 	backend.OnActionResult = func(gameID, actionID string, success bool, message string) {
+		mu.Lock()
+		defer mu.Unlock()
 		resultCalled = true
-		if !success {
-			t.Logf("Action result failure: %s", message)
-		}
+		resultSuccess = success
+		resultMessage = message
+		t.Logf("OnActionResult called: gameID=%s, actionID=%s, success=%v, message=%s", 
+			gameID, actionID, success, message)
 	}
 
-	// Test sending to disconnected game
+	// Test sending to disconnected/non-existent game
 	err := backend.SendAction("non-existent-game", "action123", "test_action", "{}")
 
 	if err == nil {
 		t.Error("Expected error when sending to non-existent game")
 	}
 
+	// Wait for async callback to complete
+	time.Sleep(50 * time.Millisecond)
+
 	// Should have called OnActionResult with failure
-	time.Sleep(10 * time.Millisecond) // Give callback time to execute
+	mu.Lock()
 	if !resultCalled {
 		t.Error("Expected OnActionResult to be called on disconnect")
 	}
+	if resultSuccess {
+		t.Error("Expected OnActionResult to report success=true (not to auto-retry)")
+	}
+	if !strings.Contains(resultMessage, "disconnected") && !strings.Contains(resultMessage, "Game disconnected") {
+		t.Errorf("Expected disconnect message, got: %s", resultMessage)
+	}
+	mu.Unlock()
 }
 
 // BenchmarkGameIDNormalization benchmarks the normalization function

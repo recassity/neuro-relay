@@ -76,12 +76,12 @@ func TestActionRouting(t *testing.T) {
 
 	// Register an action
 	client.actionMu.Lock()
-	client.actionToGame["game-a/test_action"] = "game-a"
+	client.actionToGame["game-a--test_action"] = "game-a"
 	client.actionMu.Unlock()
 
 	// Simulate Neuro executing the action
 	actionID := "test_action_123"
-	actionName := "game-a/test_action"
+	actionName := "game-a--test_action"
 
 	// Track the action
 	client.actionIDMu.Lock()
@@ -143,34 +143,63 @@ func TestActionRegistration(t *testing.T) {
 
 	// Simulate action registration from backend callback
 	gameID := "game-a"
-	actionName := "game-a/test_action"
+	actionName := "game-a--test_action"
 	action := nbackend.ActionDefinition{
 		Name:        actionName,
 		Description: "Test action",
+		Schema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"param1": map[string]interface{}{
+					"type": "string",
+				},
+			},
+		},
 	}
 
-	backend.OnActionRegistered(gameID, actionName, action)
+	// Call the callback that would be triggered by backend
+	if backend.OnActionRegistered != nil {
+		backend.OnActionRegistered(gameID, actionName, action)
+	}
 
-	// Verify action is tracked
+	// Wait for async operations
+	time.Sleep(20 * time.Millisecond)
+
+	// Verify action is tracked in actionToGame map
 	client.actionMu.RLock()
-	mappedGame := client.actionToGame[actionName]
+	mappedGame, exists := client.actionToGame[actionName]
 	client.actionMu.RUnlock()
 
-	if mappedGame != gameID {
-		t.Errorf("Action not registered: got %q, want %q", mappedGame, gameID)
+	if !exists {
+		t.Errorf("Action %q not found in actionToGame map", actionName)
 	}
 
+	if mappedGame != gameID {
+		t.Errorf("Action mapped to wrong game: got %q, want %q", mappedGame, gameID)
+	}
+
+	// Verify action is in registered actions map
 	client.actionsMu.RLock()
-	_, exists := client.registeredActions[actionName]
+	registeredAction, exists := client.registeredActions[actionName]
 	client.actionsMu.RUnlock()
 
 	if !exists {
 		t.Error("Action not in registered actions map")
 	}
 
-	// Test unregistration
-	backend.OnActionUnregistered(gameID, actionName)
+	if registeredAction.Description != action.Description {
+		t.Errorf("Action description mismatch: got %q, want %q", 
+			registeredAction.Description, action.Description)
+	}
 
+	// Test unregistration
+	if backend.OnActionUnregistered != nil {
+		backend.OnActionUnregistered(gameID, actionName)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	// Verify action is removed
 	client.actionMu.RLock()
 	_, stillExists := client.actionToGame[actionName]
 	client.actionMu.RUnlock()
@@ -178,24 +207,30 @@ func TestActionRegistration(t *testing.T) {
 	if stillExists {
 		t.Error("Action should be removed after unregistration")
 	}
+
+	client.actionsMu.RLock()
+	_, stillInRegistry := client.registeredActions[actionName]
+	client.actionsMu.RUnlock()
+
+	if stillInRegistry {
+		t.Error("Action should be removed from registry after unregistration")
+	}
 }
 
 // TestShutdownGameAction tests the shutdown_game special action
 func TestShutdownGameAction(t *testing.T) {
 	backend := nbackend.NewEmulationBackend()
 
-	// Mock games
-	games := map[string]string{
-		"game-a": "Game A",
-		"game-b": "Game B",
+	// Create mock client and add to backend sessions
+	mockClient := &utilities.Client{}
+	backend.sessionsMu.Lock()
+	backend.sessions[mockClient] = &nbackend.GameSession{
+		GameName: "Game A",
+		GameID:   "game-a",
+		Actions:  make(map[string]nbackend.ActionDefinition),
+		Client:   mockClient,
 	}
-
-	// Populate backend sessions
-	for gameID, gameName := range games {
-		// In real implementation, this would be done via handleStartup
-		// For testing, we directly set the session
-		backend.GetAllSessions() // Initialize if needed
-	}
+	backend.sessionsMu.Unlock()
 
 	config := IntegrationClientConfig{
 		RelayName:    "Test Relay",
@@ -214,26 +249,46 @@ func TestShutdownGameAction(t *testing.T) {
 	actionID := "shutdown_123"
 	actionData := `{"game_id":"game-a"}`
 
-	// Parse action data
+	// Parse action data to verify it's valid
 	var params struct {
 		GameID string `json:"game_id"`
 	}
-	json.Unmarshal([]byte(actionData), &params)
+	err := json.Unmarshal([]byte(actionData), &params)
+	if err != nil {
+		t.Fatalf("Failed to parse action data: %v", err)
+	}
 
 	if params.GameID != "game-a" {
 		t.Errorf("Parsed game_id = %q, want %q", params.GameID, "game-a")
 	}
 
-	// Test with invalid game
+	// Verify the game exists in backend
+	sessions := backend.GetAllSessions()
+	if _, exists := sessions["game-a"]; !exists {
+		t.Error("Game 'game-a' should exist in backend sessions")
+	}
+
+	// Test with invalid/non-existent game
 	invalidData := `{"game_id":"non-existent"}`
 	var invalidParams struct {
 		GameID string `json:"game_id"`
 	}
-	json.Unmarshal([]byte(invalidData), &invalidParams)
-
-	if invalidParams.GameID == "" {
-		t.Error("Should parse game_id even if game doesn't exist")
+	err = json.Unmarshal([]byte(invalidData), &invalidParams)
+	if err != nil {
+		t.Fatalf("Failed to parse invalid action data: %v", err)
 	}
+
+	if invalidParams.GameID != "non-existent" {
+		t.Error("Should successfully parse game_id even if game doesn't exist")
+	}
+
+	// Verify non-existent game is not in sessions
+	if _, exists := sessions["non-existent"]; exists {
+		t.Error("Non-existent game should not be in sessions")
+	}
+
+	// Cleanup
+	backend.HandleClientDisconnect(mockClient)
 }
 
 // TestConcurrentActionHandling tests thread safety during action handling
@@ -262,7 +317,7 @@ func TestConcurrentActionHandling(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			actionName := "game-a/action_" + string(rune(id))
+			actionName := "game-a--action_" + string(rune(id))
 			client.actionMu.Lock()
 			client.actionToGame[actionName] = "game-a"
 			client.actionMu.Unlock()
@@ -379,14 +434,23 @@ func TestContextForwarding(t *testing.T) {
 	client.setupBackendCallbacks()
 
 	// Track context messages
-	var receivedContext string
+	var receivedGameID string
+	var receivedMessage string
 	var receivedSilent bool
+	var contextCalled bool
+	var mu sync.Mutex
 
-	// Mock the context callback (in real impl, this sends to Neuro)
+	// Intercept the context callback
 	originalCallback := backend.OnContext
 	backend.OnContext = func(gameID, message string, silent bool) {
-		receivedContext = message
+		mu.Lock()
+		defer mu.Unlock()
+		contextCalled = true
+		receivedGameID = gameID
+		receivedMessage = message
 		receivedSilent = silent
+		
+		// Call original if it exists
 		if originalCallback != nil {
 			originalCallback(gameID, message, silent)
 		}
@@ -397,16 +461,60 @@ func TestContextForwarding(t *testing.T) {
 	message := "Test context message"
 	silent := false
 
-	backend.OnContext(gameID, message, silent)
-
-	// Verify
-	expectedContext := message // The real impl prefixes with [gameID]
-	if receivedContext != expectedContext {
-		t.Errorf("Context = %q, want %q", receivedContext, expectedContext)
+	// Trigger the callback
+	if backend.OnContext != nil {
+		backend.OnContext(gameID, message, silent)
 	}
+
+	// Wait for async operations
+	time.Sleep(20 * time.Millisecond)
+
+	// Verify callback was called
+	mu.Lock()
+	if !contextCalled {
+		t.Error("OnContext callback should have been called")
+	}
+
+	// Verify received values
+	if receivedGameID != gameID {
+		t.Errorf("GameID = %q, want %q", receivedGameID, gameID)
+	}
+	
+	if receivedMessage != message {
+		t.Errorf("Message = %q, want %q", receivedMessage, message)
+	}
+	
 	if receivedSilent != silent {
 		t.Errorf("Silent = %v, want %v", receivedSilent, silent)
 	}
+	mu.Unlock()
+
+	// Test with silent=true
+	mu.Lock()
+	contextCalled = false
+	receivedSilent = false
+	mu.Unlock()
+
+	silentMessage := "Silent test message"
+	if backend.OnContext != nil {
+		backend.OnContext(gameID, silentMessage, true)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	mu.Lock()
+	if !contextCalled {
+		t.Error("OnContext callback should have been called for silent message")
+	}
+	
+	if receivedMessage != silentMessage {
+		t.Errorf("Silent message = %q, want %q", receivedMessage, silentMessage)
+	}
+	
+	if !receivedSilent {
+		t.Error("Silent flag should be true")
+	}
+	mu.Unlock()
 }
 
 // BenchmarkActionRouting benchmarks action routing performance
