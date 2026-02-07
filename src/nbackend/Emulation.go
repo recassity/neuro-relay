@@ -431,8 +431,8 @@ func (eb *EmulationBackend) handleRegisterActions(c *utilities.Client, msg Clien
 		// Only prefix actions if multiplexing is supported
 		var actionNameToRegister string
 		if session.VersionFeatures.SupportsMultiplexing {
-			// Generate prefixed action name for neuro: gameID/actionName
-			actionNameToRegister = session.GameID + "/" + action.Name
+			// Generate prefixed action name for neuro: gameID--actionName
+			actionNameToRegister = session.GameID + "--" + action.Name
 			log.Printf("Registered action with multiplexing: %s -> %s", action.Name, actionNameToRegister)
 		} else {
 			// No prefixing for non-multiplexing clients
