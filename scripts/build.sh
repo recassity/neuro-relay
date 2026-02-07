@@ -4,9 +4,17 @@
 
 set -e
 
+DIST_DIR="dist"
+
 echo "======================================"
 echo "  Building NeuroRelay v1.0.0"
 echo "======================================"
+echo ""
+
+# Ensure dist directory exists
+echo "Preparing dist directory..."
+mkdir -p "$DIST_DIR"
+echo "✅ dist/ directory ready"
 echo ""
 
 # Check Go version
@@ -31,7 +39,7 @@ echo ""
 # Build NeuroRelay
 echo "Building NeuroRelay..."
 cd src
-go build -o ../neurorelay -ldflags="-s -w" entrypoint.go
+go build -o "../$DIST_DIR/neurorelay" -ldflags="-s -w" entrypoint.go
 cd ..
 echo "✅ NeuroRelay built successfully"
 echo ""
@@ -39,34 +47,33 @@ echo ""
 # Build example game
 echo "Building example game..."
 cd examples
-go build -o ../example_game -ldflags="-s -w" example_game.go
+go build -o "../$DIST_DIR/example_game" -ldflags="-s -w" example_game.go
 echo "✅ Example game built successfully"
 echo ""
 
 # Build NR compatible example
 echo "Building NR-compatible example..."
-go build -o ../nr_example_game -ldflags="-s -w" nr_compatible_game.go
+go build -o "../$DIST_DIR/nr_example_game" -ldflags="-s -w" nr_compatible_game.go
 cd ..
 echo "✅ NR-compatible example built successfully"
 echo ""
+
+# Switch to dist directory
+cd "$DIST_DIR"
 
 echo "======================================"
 echo "  Build Complete!"
 echo "======================================"
 echo ""
-echo "Executables created:"
-echo "  - ./neurorelay         (Main relay server)"
-echo "  - ./example_game       (Basic example integration)"
-echo "  - ./nr_example_game    (NR-compatible example with health checks)"
+echo "Executables created in ./dist:"
+echo "  - neurorelay         (Main relay server)"
+echo "  - example_game       (Basic example integration)"
+echo "  - nr_example_game    (NR-compatible example with health checks)"
+echo ""
+echo "You are now in the dist/ directory."
 echo ""
 echo "To start NeuroRelay:"
 echo "  ./neurorelay -name \"Game Hub\" -neuro-url \"ws://localhost:8000\" -emulated-addr \"127.0.0.1:8001\""
-echo ""
-echo "To run the basic example:"
-echo "  ./example_game"
-echo ""
-echo "To run the NR-compatible example:"
-echo "  ./nr_example_game"
 echo ""
 echo "For more information, see:"
 echo "  - README.md (Overview)"
