@@ -129,11 +129,11 @@ Emulated Backend:
   - Call OnActionRegistered("game-a", "game-a/buy_book", action)
         ↓
 Integration Client:
-  - Track: actionToGame["game-a/buy_book"] = "game-a"
+  - Track: actionToGame["game-a--buy_book"] = "game-a"
   - Create RelayActionHandler
   - Register with Neuro SDK
         ↓
-Neuro receives: Action "game-a/buy_book" from "Game Hub"
+Neuro receives: Action "game-a--buy_book" from "Game Hub"
 ```
 
 #### Action Execution Flow:
