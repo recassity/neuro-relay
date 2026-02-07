@@ -93,6 +93,7 @@ type EmulationBackend struct {
 	OnContext            func(gameID string, message string, silent bool)
 	OnActionResult       func(gameID string, actionID string, success bool, message string)
 	OnActionForce        func(gameID string, state string, query string, ephemeralContext bool, priority string, actionNames []string)
+	OnShutdownReady      func(gameID string)
 }
 
 /* =========================
@@ -161,6 +162,9 @@ func (eb *EmulationBackend) messageHandler(c *utilities.Client, _ int, raw []byt
 
 	case "action/result":
 		eb.handleActionResult(c, msg)
+
+	case "shutdown/ready":
+		eb.handleShutdownReady(c, msg)
 
 	default:
 		log.Printf("unknown command: %s", msg.Command)
@@ -237,9 +241,9 @@ func (eb *EmulationBackend) handleNRCStartup(c *utilities.Client, msg ClientMess
 		Data: map[string]interface{}{
 			"nr-version": CurrentNRelayVersion,
 			"features": map[string]interface{}{
-				"health-endpoint":  features.SupportsHealthEndpoint,
-				"multiplexing":     features.SupportsMultiplexing,
-				"custom-routing":   features.SupportsCustomRouting,
+				"health-endpoint": features.SupportsHealthEndpoint,
+				"multiplexing":    features.SupportsMultiplexing,
+				"custom-routing":  features.SupportsCustomRouting,
 			},
 		},
 	})
@@ -551,6 +555,24 @@ func (eb *EmulationBackend) handleActionResult(c *utilities.Client, msg ClientMe
 	}
 }
 
+func (eb *EmulationBackend) handleShutdownReady(c *utilities.Client, msg ClientMessage) {
+	eb.sessionsMu.RLock()
+	session := eb.sessions[c]
+	eb.sessionsMu.RUnlock()
+
+	if session == nil {
+		log.Println("Shutdown ready received from unknown session")
+		return
+	}
+
+	log.Printf("Game %s is ready to shutdown", session.GameID)
+
+	// Notify integration client
+	if eb.OnShutdownReady != nil {
+		eb.OnShutdownReady(session.GameID)
+	}
+}
+
 /* =========================
    Public methods for integration client
    ========================= */
@@ -579,7 +601,7 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 		// so Neuro doesn't wait forever for a response
 		if eb.OnActionResult != nil {
 			log.Printf("Notifying Neuro that game '%s' disconnected for action %s", gameID, actionID)
-			// Make the sucess bool true, so Neuro / Evil don't automatically retry
+			// Make the success bool true, so Neuro / Evil don't automatically retry
 			// The message will indicate the disconnect
 			eb.OnActionResult(gameID, actionID, true, "Game disconnected unexpectedly")
 		}
@@ -610,6 +632,36 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	// CRITICAL FIX: Use safe send that won't panic on closed channel
 	// and notifies Neuro if send fails
 	return eb.sendJSONSafe(targetClient, payload, gameID, actionID)
+}
+
+// SendShutdown sends a graceful shutdown command to a specific game
+func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) error {
+	// Find the client for this game
+	eb.sessionsMu.RLock()
+	var targetClient *utilities.Client
+
+	for client, session := range eb.sessions {
+		if session.GameID == gameID {
+			targetClient = client
+			break
+		}
+	}
+	eb.sessionsMu.RUnlock()
+
+	if targetClient == nil {
+		return fmt.Errorf("game session not found: %s", gameID)
+	}
+
+	log.Printf("Sending shutdown command to %s (wants_shutdown: %v)", gameID, wantsShutdown)
+
+	payload := ServerMessage{
+		Command: "shutdown/graceful",
+		Data: map[string]interface{}{
+			"wants_shutdown": wantsShutdown,
+		},
+	}
+
+	return eb.sendJSON(targetClient, payload)
 }
 
 // GetAllSessions returns information about all connected sessions
