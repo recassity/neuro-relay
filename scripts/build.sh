@@ -52,7 +52,7 @@ echo "✅ Example game built successfully"
 echo ""
 
 # Switch to dist directory
-cd "$DIST_DIR"
+cd "../$DIST_DIR"
 
 echo "======================================"
 echo "  Build Complete!"
