@@ -276,7 +276,11 @@ func (ic *IntegrationClient) handleActionFromNeuro(msg map[string]interface{}) {
 	// Forward to game with THE SAME action ID
 	if err := ic.backend.SendAction(gameID, actionID, actionName, actionData); err != nil {
 		log.Printf("Failed to send action to game: %v", err)
-		ic.sendActionResult(actionID, false, fmt.Sprintf("Failed to relay: %v", err))
+
+		// Scuffed patch for now, to avoid neuro relay sending duplicate action results
+		if err != fmt.Errorf("game session not found: %s (client disconnected)", gameID) {
+			ic.sendActionResult(actionID, true, fmt.Sprintf("Failed to relay: %v", err))
+		}
 		
 		ic.actionIDMu.Lock()
 		delete(ic.actionIDToGame, actionID)
