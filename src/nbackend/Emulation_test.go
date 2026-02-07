@@ -129,9 +129,9 @@ func TestActionPrefixing(t *testing.T) {
 		multiplexing bool
 		expectedName string
 	}{
-		{"game-a", "buy_books", true, "game-a/buy_books"},
+		{"game-a", "buy_books", true, "game-a--buy_books"},
 		{"game-a", "buy_books", false, "buy_books"},
-		{"buckshot-roulette", "shoot", true, "buckshot-roulette/shoot"},
+		{"buckshot-roulette", "shoot", true, "buckshot-roulette--shoot"},
 		{"buckshot-roulette", "shoot", false, "shoot"},
 	}
 
