@@ -51,13 +51,6 @@ go build -o "../$DIST_DIR/example_game" -ldflags="-s -w" example_game.go
 echo "✅ Example game built successfully"
 echo ""
 
-# Build NR compatible example
-echo "Building NR-compatible example..."
-go build -o "../$DIST_DIR/nr_example_game" -ldflags="-s -w" nr_compatible_game.go
-cd ..
-echo "✅ NR-compatible example built successfully"
-echo ""
-
 # Switch to dist directory
 cd "$DIST_DIR"
 
@@ -68,7 +61,6 @@ echo ""
 echo "Executables created in ./dist:"
 echo "  - neurorelay         (Main relay server)"
 echo "  - example_game       (Basic example integration)"
-echo "  - nr_example_game    (NR-compatible example with health checks)"
 echo ""
 echo "You are now in the dist/ directory."
 echo ""
