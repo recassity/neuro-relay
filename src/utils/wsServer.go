@@ -124,7 +124,7 @@ func (c *Client) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	
+
 	// Close the WebSocket connection
 	// This will trigger the readPump to exit, which calls unregister
 	return c.conn.Close()

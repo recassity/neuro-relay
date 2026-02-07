@@ -188,7 +188,7 @@ func TestActionRegistration(t *testing.T) {
 	}
 
 	if registeredAction.Description != action.Description {
-		t.Errorf("Action description mismatch: got %q, want %q", 
+		t.Errorf("Action description mismatch: got %q, want %q",
 			registeredAction.Description, action.Description)
 	}
 
@@ -449,7 +449,7 @@ func TestContextForwarding(t *testing.T) {
 		receivedGameID = gameID
 		receivedMessage = message
 		receivedSilent = silent
-		
+
 		// Call original if it exists
 		if originalCallback != nil {
 			originalCallback(gameID, message, silent)
@@ -479,11 +479,11 @@ func TestContextForwarding(t *testing.T) {
 	if receivedGameID != gameID {
 		t.Errorf("GameID = %q, want %q", receivedGameID, gameID)
 	}
-	
+
 	if receivedMessage != message {
 		t.Errorf("Message = %q, want %q", receivedMessage, message)
 	}
-	
+
 	if receivedSilent != silent {
 		t.Errorf("Silent = %v, want %v", receivedSilent, silent)
 	}
@@ -506,11 +506,11 @@ func TestContextForwarding(t *testing.T) {
 	if !contextCalled {
 		t.Error("OnContext callback should have been called for silent message")
 	}
-	
+
 	if receivedMessage != silentMessage {
 		t.Errorf("Silent message = %q, want %q", receivedMessage, silentMessage)
 	}
-	
+
 	if !receivedSilent {
 		t.Error("Silent flag should be true")
 	}

@@ -124,10 +124,10 @@ func TestActionPrefixing(t *testing.T) {
 	backend := NewEmulationBackend()
 
 	tests := []struct {
-		gameID         string
-		actionName     string
-		multiplexing   bool
-		expectedName   string
+		gameID       string
+		actionName   string
+		multiplexing bool
+		expectedName string
 	}{
 		{"game-a", "buy_books", true, "game-a/buy_books"},
 		{"game-a", "buy_books", false, "buy_books"},
@@ -167,7 +167,7 @@ func TestActionPrefixing(t *testing.T) {
 			backend.sessionsMu.RLock()
 			session := backend.sessions[mockClient]
 			backend.sessionsMu.RUnlock()
-			
+
 			session.Actions[action.Name] = action
 
 			// Determine the forwarded action name based on multiplexing
@@ -413,7 +413,7 @@ func TestSendActionSafety(t *testing.T) {
 		resultCalled = true
 		resultSuccess = success
 		resultMessage = message
-		t.Logf("OnActionResult called: gameID=%s, actionID=%s, success=%v, message=%s", 
+		t.Logf("OnActionResult called: gameID=%s, actionID=%s, success=%v, message=%s",
 			gameID, actionID, success, message)
 	}
 

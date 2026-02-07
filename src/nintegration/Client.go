@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	//"github.com/cassitly/neuro-integration-sdk"
-	"github.com/recassity/neuro-relay/src/nbackend"
 	"github.com/gorilla/websocket"
+	"github.com/recassity/neuro-relay/src/nbackend"
 	"net/url"
 	"time"
 )
@@ -28,7 +28,7 @@ type IntegrationClient struct {
 	neuroConn *websocket.Conn // Direct WebSocket connection to Neuro
 	backend   *nbackend.EmulationBackend
 
-	// Track which actions belong to which game  
+	// Track which actions belong to which game
 	actionToGame map[string]string // Maps "game-a/buy_books" -> "game-a"
 	actionMu     sync.RWMutex
 
@@ -36,13 +36,13 @@ type IntegrationClient struct {
 	actionIDToGame map[string]string
 	actionIDMu     sync.RWMutex
 
-	config        IntegrationClientConfig
-	closeChan     chan struct{}
+	config            IntegrationClientConfig
+	closeChan         chan struct{}
 	registeredActions map[string]nbackend.ActionDefinition
-	actionsMu     sync.RWMutex
-	
+	actionsMu         sync.RWMutex
+
 	// Mutex to protect WebSocket writes (gorilla/websocket is not thread-safe)
-	sendMu        sync.Mutex
+	sendMu sync.Mutex
 }
 
 type IntegrationClientConfig struct {
@@ -71,11 +71,11 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 	ic.backend.OnStartup = func(gameID string, gameName string) {
 		log.Printf("Game started: %s (%s)", gameName, gameID)
 		ic.sendContextToNeuro("Game '"+gameName+"' connected to relay", true)
-		
+
 		// Re-register the shutdown_game action with updated game list
 		ic.registerShutdownAction()
 	}
-	
+
 	ic.backend.OnShutdownReady = func(gameID string) {
 		log.Printf("Game %s is ready to shutdown", gameID)
 		ic.sendContextToNeuro("Game '"+gameID+"' has shut down gracefully", true)
@@ -90,7 +90,7 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 		ic.actionMu.Unlock()
 
 		log.Printf("Registering action with Neuro: %s", actionName)
-		
+
 		// Send register message to Neuro
 		ic.sendToNeuro(map[string]interface{}{
 			"command": "actions/register",
@@ -116,7 +116,7 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 		ic.actionMu.Unlock()
 
 		log.Printf("Unregistering action from Neuro: %s", actionName)
-		
+
 		ic.sendToNeuro(map[string]interface{}{
 			"command": "actions/unregister",
 			"game":    ic.config.RelayName,
@@ -135,7 +135,7 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 	ic.backend.OnActionResult = func(gameID string, actionID string, success bool, message string) {
 		log.Printf("Received action result from %s: id=%s, success=%v", gameID, actionID, success)
 		log.Printf("Forwarding action result to Neuro: id=%s, success=%v, message=%s", actionID, success, message)
-		
+
 		// Send result to Neuro with the SAME action ID
 		ic.sendToNeuro(map[string]interface{}{
 			"command": "action/result",
@@ -155,7 +155,7 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 
 	ic.backend.OnActionForce = func(gameID string, state string, query string, ephemeralContext bool, priority string, actionNames []string) {
 		log.Printf("Forwarding action force to Neuro from %s: %v", gameID, actionNames)
-		
+
 		prefixedQuery := "[" + gameID + "] " + query
 
 		data := map[string]interface{}{
@@ -164,7 +164,7 @@ func (ic *IntegrationClient) setupBackendCallbacks() {
 			"ephemeral_context": ephemeralContext,
 			"priority":          priority,
 		}
-		
+
 		if state != "" {
 			data["state"] = state
 		}
@@ -227,7 +227,7 @@ func (ic *IntegrationClient) Start() error {
 // registerShutdownAction registers/updates the shutdown_game action with current game list
 func (ic *IntegrationClient) registerShutdownAction() {
 	games := ic.backend.GetAllSessions()
-	
+
 	if len(games) == 0 {
 		// No games connected, unregister the action
 		ic.sendToNeuro(map[string]interface{}{
@@ -239,15 +239,15 @@ func (ic *IntegrationClient) registerShutdownAction() {
 		})
 		return
 	}
-	
+
 	// Build enum of game IDs
 	gameIDs := make([]string, 0, len(games))
 	for gameID := range games {
 		gameIDs = append(gameIDs, gameID)
 	}
-	
+
 	log.Printf("Registering shutdown_game action with games: %v", gameIDs)
-	
+
 	// Register the shutdown action
 	ic.sendToNeuro(map[string]interface{}{
 		"command": "actions/register",
@@ -356,11 +356,11 @@ func (ic *IntegrationClient) handleActionFromNeuro(msg map[string]interface{}) {
 	// The backend will handle sending the result if the game is disconnected
 	if err := ic.backend.SendAction(gameID, actionID, actionName, actionData); err != nil {
 		log.Printf("Failed to send action to game: %v", err)
-		
+
 		// IMPORTANT: Don't send duplicate results here!
 		// The backend's SendAction already calls OnActionResult callback
 		// if the game is disconnected, so we just need to clean up our tracking
-		
+
 		ic.actionIDMu.Lock()
 		delete(ic.actionIDToGame, actionID)
 		ic.actionIDMu.Unlock()
@@ -373,7 +373,7 @@ func (ic *IntegrationClient) handleShutdownGameAction(actionID string, actionDat
 	var params struct {
 		GameID string `json:"game_id"`
 	}
-	
+
 	if actionData != "" {
 		if err := json.Unmarshal([]byte(actionData), &params); err != nil {
 			log.Printf("Failed to parse shutdown_game parameters: %v", err)
@@ -381,38 +381,38 @@ func (ic *IntegrationClient) handleShutdownGameAction(actionID string, actionDat
 			return
 		}
 	}
-	
+
 	if params.GameID == "" {
 		ic.sendActionResult(actionID, false, "Missing game_id parameter")
 		return
 	}
-	
+
 	log.Printf("Requesting graceful shutdown for game: %s", params.GameID)
-	
+
 	// Send shutdown command to the game and get client reference for fallback
 	client, err := ic.backend.SendShutdown(params.GameID, true)
 	if err != nil {
- 		log.Printf("Failed to send shutdown to game %s: %v", params.GameID, err)
- 		ic.sendActionResult(actionID, false, fmt.Sprintf("Failed to shutdown game: %v", err))
- 		return
- 	}
- 	
+		log.Printf("Failed to send shutdown to game %s: %v", params.GameID, err)
+		ic.sendActionResult(actionID, false, fmt.Sprintf("Failed to shutdown game: %v", err))
+		return
+	}
+
 	// Start timeout goroutine for fallback forceful disconnect
 	go func() {
 		// Wait for graceful shutdown timeout
 		time.Sleep(ShutdownGracefulTimeout)
-		
+
 		// Check if game is still connected
 		games := ic.backend.GetAllSessions()
 		if _, stillConnected := games[params.GameID]; stillConnected {
-			log.Printf("⏱️ Game %s did not respond to graceful shutdown within %v, forcing disconnect", 
+			log.Printf("⏱️ Game %s did not respond to graceful shutdown within %v, forcing disconnect",
 				params.GameID, ShutdownGracefulTimeout)
 			ic.backend.ForceDisconnect(client, params.GameID)
 		} else {
 			log.Printf("✅ Game %s shut down gracefully before timeout", params.GameID)
 		}
 	}()
-	
+
 	ic.sendActionResult(actionID, true, fmt.Sprintf("Shutdown request sent to game %s", params.GameID))
 }
 
@@ -423,23 +423,23 @@ func (ic *IntegrationClient) handleGracefulShutdown(msg map[string]interface{}) 
 		log.Println("Invalid graceful shutdown message: missing data")
 		return
 	}
-	
+
 	wantsShutdown, ok := data["wants_shutdown"].(bool)
 	if !ok {
 		log.Println("Invalid graceful shutdown message: missing wants_shutdown")
 		return
 	}
-	
+
 	if wantsShutdown {
 		log.Println("⚠️ NeuroRelay graceful shutdown requested by Neuro")
 		log.Println("Sending shutdown ready acknowledgment...")
-		
+
 		// Send shutdown/ready to acknowledge
 		ic.sendToNeuro(map[string]interface{}{
 			"command": "shutdown/ready",
 			"game":    ic.config.RelayName,
 		})
-		
+
 		log.Println("✅ Shutdown ready sent. NeuroRelay will be terminated by Neuro.")
 		// Neuro will terminate the process
 	} else {
@@ -476,7 +476,7 @@ func (ic *IntegrationClient) sendToNeuro(msg map[string]interface{}) error {
 	// gorilla/websocket is NOT thread-safe for concurrent writes
 	ic.sendMu.Lock()
 	defer ic.sendMu.Unlock()
-	
+
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)

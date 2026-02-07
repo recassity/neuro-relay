@@ -596,7 +596,7 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	if targetClient == nil {
 		err := fmt.Errorf("game session not found: %s (client disconnected)", gameID)
 		log.Printf("ERROR: %v", err)
-		
+
 		// CRITICAL: Send failure result back to integration client
 		// so Neuro doesn't wait forever for a response
 		if eb.OnActionResult != nil {
@@ -605,7 +605,7 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 			// The message will indicate the disconnect
 			eb.OnActionResult(gameID, actionID, true, "Game disconnected unexpectedly")
 		}
-		
+
 		return err
 	}
 
@@ -634,7 +634,7 @@ func (eb *EmulationBackend) SendAction(gameID string, actionID string, actionNam
 	return eb.sendJSONSafe(targetClient, payload, gameID, actionID)
 }
 
-// SendShutdown sends a graceful shutdown command to a specific game  
+// SendShutdown sends a graceful shutdown command to a specific game
 // Returns the client connection for fallback forceful disconnect if needed
 func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) (*utilities.Client, error) {
 	// Find the client for this game
@@ -669,13 +669,13 @@ func (eb *EmulationBackend) SendShutdown(gameID string, wantsShutdown bool) (*ut
 // ForceDisconnect forcefully closes a game's WebSocket connection
 func (eb *EmulationBackend) ForceDisconnect(client *utilities.Client, gameID string) {
 	log.Printf("⚠️ Forcefully disconnecting game: %s (shutdown timeout - game did not respond to graceful shutdown)", gameID)
-	
+
 	// The client's Close() method will trigger the websocket close,
 	// which will automatically trigger the unregister mechanism in wsServer.go
 	if err := client.Close(); err != nil {
 		log.Printf("Error closing connection for %s: %v", gameID, err)
 	}
-	
+
 	log.Printf("✅ Game %s forcefully disconnected via WebSocket close", gameID)
 }
 
@@ -756,7 +756,7 @@ func (eb *EmulationBackend) sendJSONSafe(c *utilities.Client, v interface{}, gam
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("WARNING: Failed to send to %s (client disconnected): %v", gameID, r)
-			
+
 			// Clean up the session if it still exists
 			eb.sessionsMu.Lock()
 			for client, session := range eb.sessions {
@@ -767,7 +767,7 @@ func (eb *EmulationBackend) sendJSONSafe(c *utilities.Client, v interface{}, gam
 				}
 			}
 			eb.sessionsMu.Unlock()
-			
+
 			// CRITICAL: Notify Neuro that the action failed due to disconnect
 			if eb.OnActionResult != nil {
 				log.Printf("Notifying Neuro of disconnect during send for action %s", actionID)
